@@ -1,0 +1,14 @@
+Data downloaded from here:
+http://www.iam.unibe.ch/fki/databases/iam-on-line-handwriting-database/download-the-iam-on-line-handwriting-database
+Need to register in order to download "ascii-all.tar.gz",
+"lineStrokes-all.tar.gz", "trainset.txt", "testset_t.txt", "testset_f.txt",
+and "testset_v.txt". Once done, the tar.gz files should be unzipped, revealing
+directory structures "ascii" and "lineStrokes".
+
+The ultimate train/valid splits for this dataset are taken from
+"Generating Sequences With Recurrent Neural Networks", Alex Graves, 2013.
+See section 4: Handwriting Prediction for a detailed breakdown. The directions
+according to the paper indicate combining "trainset.txt", "testset_t.txt", and
+"testset_f.txt" into one trianing set, while using "testset_v.txt" as valid.
+
+This is reflected in the files "train.txt" and "valid.txt".
