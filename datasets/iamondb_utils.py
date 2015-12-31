@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import cPickle
 import fnmatch
+import re
 
 from lxml import etree
 
