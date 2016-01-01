@@ -94,9 +94,17 @@ class IAMOnDB(TemporalSeries, SequentialPrepMixin):
 
         batches = [mat[start:end] for mat in self.data]
         label_batches = [mat[start:end] for mat in self.labels]
-        mask = self.create_mask(batches[0].swapaxes(0, 1))
+        len_batches = len(batches[0].shape)
+        if(len_batches <= 1):
+            mask = self.create_mask(batches[0])
+        else:
+            mask = self.create_mask(batches[0].swapaxes(0, 1))
         batches = [self.zero_pad(batch) for batch in batches]
-        label_mask = self.create_mask(label_batches[0].swapaxes(0, 1))
+        len_label_batches = len(label_batches[0].shape)
+        if(len_label_batches <= 1):
+            label_mask = self.create_mask(label_batches[0])
+        else:
+            label_mask = self.create_mask(label_batches[0].swapaxes(0, 1))
         label_batches = [self.zero_pad(batch) for batch in label_batches]
 
         if self.cond:
