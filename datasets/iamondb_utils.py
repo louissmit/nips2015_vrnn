@@ -12,6 +12,7 @@ from lxml import etree
 def plot_scatter_iamondb_example(X, y=None, equal=True, show=False, save=False,
                                  save_name="tmp.png"):
 
+    plt.clf()
     rgba_colors = np.zeros((len(X), 4))
     normed = (X - X.min(axis=0)) / (X.max(axis=0) - X.min(axis=0))
 
@@ -25,9 +26,9 @@ def plot_scatter_iamondb_example(X, y=None, equal=True, show=False, save=False,
     rgba_colors[:, 3] = np.ones((len(X),)) * .4 + .4 * normed[:, 0]
 
     if len(X[0]) == 3:
-        plt.scatter(X[:, 1], X[:, 2], color=rgba_colors)
+        plt.scatter(X[:, 1], X[:, 2], color=rgba_colors, s=2)
     elif len(X[0]) == 2:
-        plt.scatter(X[:, 0], X[:, 1], color=rgba_colors)
+        plt.scatter(X[:, 0], X[:, 1], color=rgba_colors, s=2)
 
     if y is not None:
         plt.title(y)

@@ -2,8 +2,12 @@ import ipdb
 import numpy as np
 import theano
 import theano.tensor as T
+theano.config.exception_verbosity='high'
+# theano.config.mode='FAST_COMPILE'
+theano.config.OMP_NUM_THREADS = 4
+# theano.config.compute_test_value = 'warn'
 
-from cle.cle.cost import BiGauss, KLGaussianGaussian
+from cle.cle.cost import Gaussian, BiGauss, KLGaussianGaussian
 from cle.cle.data import Iterator
 from cle.cle.models import Model
 from cle.cle.layers import InitCell
@@ -24,7 +28,7 @@ from cle.cle.utils.compat import OrderedDict
 from cle.cle.utils.op import Gaussian_sample
 from cle.cle.utils.gpu_op import concatenate
 
-from nips2015_vrnn.datasets.iamondb import IAMOnDB
+from toy import Toy
 
 
 def main(args):
@@ -57,37 +61,27 @@ def main(args):
     p_x_dim = 250
     x2s_dim = 250
     z2s_dim = 150
-    target_dim = (x_dim-1)
+    target_dim = x_dim
 
     model = Model()
-    train_data = IAMOnDB(name='train',
-                         prep='normalize',
-                         cond=False,
-                         path=data_path)
-
-    X_mean = train_data.X_mean
-    X_std = train_data.X_std
-
-    valid_data = IAMOnDB(name='valid',
-                         prep='normalize',
-                         cond=False,
-                         path=data_path,
-                         X_mean=X_mean,
-                         X_std=X_std)
+    train_data = Toy(N=1000, T=300, type="training")
+    valid_data = Toy(N=1000, T=300, type="valid")
 
     init_W = InitCell('rand')
     init_U = InitCell('ortho')
     init_b = InitCell('zeros')
     init_b_sig = InitCell('const', mean=0.6)
 
-    x, mask = train_data.theano_vars()
+    x = train_data.theano_vars()
 
     if debug:
-        x.tag.test_value = np.zeros((15, batch_size, x_dim), dtype=np.float32)
-        temp = np.ones((15, batch_size), dtype=np.float32)
-        temp[:, -2:] = 0.
-        mask.tag.test_value = temp
+        x.tag.test_value = np.zeros((500, batch_size), dtype=np.float32)
+        # temp = np.ones((15, batch_size), dtype=np.float32)
+        # temp[:, -2:] = 0.
+        # mask.tag.test_value = temp
 
+    # feature extractors
+    # varphi_x
     x_1 = FullyConnectedLayer(name='x_1',
                               parent=['x_t'],
                               parent_dim=[x_dim],
@@ -96,6 +90,8 @@ def main(args):
                               init_W=init_W,
                               init_b=init_b)
 
+    x = theano.printing.Print("x")(x)
+    # varphi_z
     z_1 = FullyConnectedLayer(name='z_1',
                               parent=['z_t'],
                               parent_dim=[z_dim],
@@ -104,8 +100,9 @@ def main(args):
                               init_W=init_W,
                               init_b=init_b)
 
+    # produces s_t = h_t
     rnn = LSTM(name='rnn',
-               parent=['x_1', 'z_1'],
+               parent=['x_t', 'z_1'],
                parent_dim=[x2s_dim, z2s_dim],
                nout=rnn_dim,
                unit='tanh',
@@ -113,8 +110,9 @@ def main(args):
                init_U=init_U,
                init_b=init_b)
 
+    # encoder
     phi_1 = FullyConnectedLayer(name='phi_1',
-                                parent=['x_1', 's_tm1'],
+                                parent=['x_t', 's_tm1'],
                                 parent_dim=[x2s_dim, rnn_dim],
                                 nout=q_z_dim,
                                 unit='relu',
@@ -138,6 +136,7 @@ def main(args):
                                   init_W=init_W,
                                   init_b=init_b_sig)
 
+    # prior
     prior_1 = FullyConnectedLayer(name='prior_1',
                                   parent=['s_tm1'],
                                   parent_dim=[rnn_dim],
@@ -163,6 +162,7 @@ def main(args):
                                     init_W=init_W,
                                     init_b=init_b_sig)
 
+    # decoder
     theta_1 = FullyConnectedLayer(name='theta_1',
                                   parent=['z_1', 's_tm1'],
                                   parent_dim=[z2s_dim, rnn_dim],
@@ -205,10 +205,10 @@ def main(args):
                                  init_b=init_b)
 
     nodes = [rnn,
-             x_1, z_1,
+             z_1,
              phi_1, phi_mu, phi_sig,
              prior_1, prior_mu, prior_sig,
-             theta_1, theta_mu, theta_sig, corr, binary]
+             theta_1, theta_mu, theta_sig]
 
     params = OrderedDict()
 
@@ -220,7 +220,7 @@ def main(args):
 
     s_0 = rnn.get_init_state(batch_size)
 
-    x_1_temp = x_1.fprop([x], params)
+    # x_1_temp = x_1.fprop([x], params)
 
 
     def inner_fn(x_t, s_tm1):
@@ -242,7 +242,7 @@ def main(args):
 
     ((s_temp, phi_mu_temp, phi_sig_temp, prior_mu_temp, prior_sig_temp, z_1_temp), updates) =\
         theano.scan(fn=inner_fn,
-                    sequences=[x_1_temp],
+                    sequences=[x],
                     outputs_info=[s_0, None, None, None, None, None])
 
     for k, v in updates.iteritems():
@@ -252,25 +252,25 @@ def main(args):
     theta_1_temp = theta_1.fprop([z_1_temp, s_temp], params)
     theta_mu_temp = theta_mu.fprop([theta_1_temp], params)
     theta_sig_temp = theta_sig.fprop([theta_1_temp], params)
-    corr_temp = corr.fprop([theta_1_temp], params)
-    binary_temp = binary.fprop([theta_1_temp], params)
+    # corr_temp = corr.fprop([theta_1_temp], params)
+    # binary_temp = binary.fprop([theta_1_temp], params)
 
     kl_temp = KLGaussianGaussian(phi_mu_temp, phi_sig_temp, prior_mu_temp, prior_sig_temp)
 
     x_shape = x.shape
-    x_in = x.reshape((x_shape[0]*x_shape[1], -1))
-    theta_mu_in = theta_mu_temp.reshape((x_shape[0]*x_shape[1], -1))
-    theta_sig_in = theta_sig_temp.reshape((x_shape[0]*x_shape[1], -1))
-    corr_in = corr_temp.reshape((x_shape[0]*x_shape[1], -1))
-    binary_in = binary_temp.reshape((x_shape[0]*x_shape[1], -1))
+    x_in = x.flatten() #((x_shape[0]*x_shape[1], -1))
+    theta_mu_in = theta_mu_temp.flatten()#reshape((x_shape[0]*x_shape[1], -1))
+    theta_sig_in = theta_sig_temp.flatten() #.reshape((x_shape[0]*x_shape[1], -1))
+    # corr_in = corr_temp.reshape((x_shape[0]*x_shape[1], -1))
+    # binary_in = binary_temp.reshape((x_shape[0]*x_shape[1], -1))
 
-    recon = BiGauss(x_in, theta_mu_in, theta_sig_in, corr_in, binary_in)
-    recon = recon.reshape((x_shape[0], x_shape[1]))
-    recon = recon * mask
-    recon_term = recon.sum(axis=0).mean()
+    recon_term = Gaussian(x_in, theta_mu_in, theta_sig_in)
+    # recon = recon.reshape((x_shape[0], x_shape[1]))
+    # recon = recon * mask
+    # recon_term = recon.sum(axis=0).mean()
     recon_term.name = 'recon_term'
 
-    kl_temp = kl_temp * mask
+    # kl_temp = kl_temp * mask
     kl_term = kl_temp.sum(axis=0).mean()
     kl_term.name = 'kl_term'
 
@@ -312,7 +312,7 @@ def main(args):
     mean_prior_sig.name = 'mean_prior_sig'
     min_prior_sig.name = 'min_prior_sig'
 
-    model.inputs = [x, mask]
+    model.inputs = [x]
     model.params = params
     model.nodes = nodes
 
@@ -332,7 +332,7 @@ def main(args):
                           max_theta_mu, mean_theta_mu, min_theta_mu],
                    data=[Iterator(valid_data, batch_size)]),
         Picklize(freq=monitoring_freq, path=save_path),
-        EarlyStopping(freq=monitoring_freq, path=save_path, channel=channel_name),
+        # EarlyStopping(freq=monitoring_freq, path=save_path, channel=channel_name),
         WeightNorm()
     ]
 

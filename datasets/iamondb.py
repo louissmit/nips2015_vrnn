@@ -1,4 +1,4 @@
-import ipdb
+
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
@@ -46,6 +46,7 @@ class IAMOnDB(TemporalSeries, SequentialPrepMixin):
             print(len(y))
 
         raw_X = X
+        print X[0].shape
         raw_X0 = []
         offset = True
         raw_new_X = []
@@ -91,8 +92,11 @@ class IAMOnDB(TemporalSeries, SequentialPrepMixin):
         return [T.ftensor3('y'), T.fmatrix('label_mask')]
 
     def slices(self, start, end):
+        print len(self.data)
+        print self.data[0].shape
 
         batches = [mat[start:end] for mat in self.data]
+        print "batches[0]", batches[0].shape
         label_batches = [mat[start:end] for mat in self.labels]
         len_batches = len(batches[0].shape)
         if(len_batches <= 1):
@@ -121,17 +125,18 @@ class IAMOnDB(TemporalSeries, SequentialPrepMixin):
 
 if __name__ == "__main__":
 
-    data_path = '/data/lisatmp3/iamondb/'
+    data_path = 'download'
     iamondb = IAMOnDB(name='train',
                       prep='normalize',
                       cond=False,
                       path=data_path)
 
-    batch = iamondb.slices(start=0, end=10826)
+    batch = iamondb.slices(start=0, end=20)
     X = iamondb.data[0]
     sub_X = X
 
     for item in X:
+        print item.shape
         max_x = np.max(item[:,1])
         max_y = np.max(item[:,2])
         min_x = np.min(item[:,1])
@@ -141,4 +146,3 @@ if __name__ == "__main__":
     print np.max(max_y)
     print np.min(min_x)
     print np.min(min_y)
-    ipdb.set_trace()
